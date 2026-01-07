@@ -1,3 +1,4 @@
+--! v
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -86,22 +87,24 @@ function SaveManager:GetConfigList()
 end
 
 function SaveManager:BuildConfigSection(Tab)
-    local Section = Tab:AddSection("Configuration")
+    local Section = Tab:Section({
+        Title = "Configuration"
+    })
     
-    local ConfigNameInput = Section:AddInput("ConfigName", {
+    local ConfigNameInput = Section:Input({
         Title = "Config Name",
         Placeholder = "Enter name...",
         Callback = function() end
     })
     
-    local ConfigListDropdown = Section:AddDropdown("ConfigList", {
+    local ConfigListDropdown = Section:Dropdown({
         Title = "Config List",
         Values = self:GetConfigList(),
         AllowNull = true,
         Callback = function() end
     })
     
-    Section:AddButton({
+    Section:Button({
         Title = "Create Config",
         Callback = function()
             local name = ConfigNameInput.Value
@@ -111,7 +114,7 @@ function SaveManager:BuildConfigSection(Tab)
         end
     })
     
-    Section:AddButton({
+    Section:Button({
         Title = "Load Config",
         Callback = function()
             local name = ConfigListDropdown.Value
@@ -119,7 +122,7 @@ function SaveManager:BuildConfigSection(Tab)
         end
     })
     
-    Section:AddButton({
+    Section:Button({
         Title = "Overwrite Config",
         Callback = function()
             local name = ConfigListDropdown.Value
@@ -127,7 +130,7 @@ function SaveManager:BuildConfigSection(Tab)
         end
     })
     
-    Section:AddButton({
+    Section:Button({
         Title = "Refresh List",
         Callback = function()
             ConfigListDropdown:Refresh(self:GetConfigList())
@@ -135,7 +138,7 @@ function SaveManager:BuildConfigSection(Tab)
     })
     
     local AutoloadFile = self.Folder .. "/settings/autoload.txt"
-    Section:AddButton({
+    Section:Button({
         Title = "Set as Autoload",
         Callback = function()
             local name = ConfigListDropdown.Value

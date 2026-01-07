@@ -1,10 +1,11 @@
---! v
+--V1
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
 SaveManager.Folder = "WindUISettings"
 SaveManager.Options = {}
 SaveManager.Parser = {}
+SaveManager.Library = nil
 
 SaveManager.Parser = {
     Toggle = {
@@ -20,6 +21,10 @@ SaveManager.Parser = {
         Load = function(Obj, Data) Obj:Set(Data.Value) end,
     }
 }
+
+function SaveManager:SetLibrary(Library)
+    self.Library = Library
+end
 
 function SaveManager:SetFolder(folder)
     self.Folder = folder
@@ -53,6 +58,16 @@ function SaveManager:Save(name)
     if not Success then return false end
     
     writefile(fullPath, Encoded)
+
+    if self.Library then
+        self.Library:Notify({
+            Title = "Save Manager",
+            Content = "Saved config: " .. name,
+            Duration = 3,
+            Icon = "check"
+        })
+    end
+
     return true
 end
 
@@ -71,6 +86,16 @@ function SaveManager:Load(name)
             end)
         end
     end
+
+    if self.Library then
+        self.Library:Notify({
+            Title = "Save Manager",
+            Content = "Loaded config: " .. name,
+            Duration = 3,
+            Icon = "check"
+        })
+    end
+
     return true
 end
 
@@ -88,7 +113,8 @@ end
 
 function SaveManager:BuildConfigSection(Tab)
     local Section = Tab:Section({
-        Title = "Configuration"
+        Title = "Configuration",
+        Opened = true
     })
     
     local ConfigNameInput = Section:Input({
@@ -144,6 +170,14 @@ function SaveManager:BuildConfigSection(Tab)
             local name = ConfigListDropdown.Value
             if name then
                 writefile(AutoloadFile, name)
+                if self.Library then
+                    self.Library:Notify({
+                        Title = "Save Manager",
+                        Content = "Set autoload to: " .. name,
+                        Duration = 3,
+                        Icon = "check"
+                    })
+                end
             end
         end
     })

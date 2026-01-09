@@ -1,4 +1,4 @@
---V1
+--V1.1
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -45,6 +45,11 @@ end
 
 function SaveManager:Save(name)
     if not name then return false end
+    
+    name = name:gsub("[^%w%-%_]", "") 
+
+    if name == "" then return false end
+
     local fullPath = self.Folder .. "/settings/" .. name .. ".json"
     
     local Data = {}

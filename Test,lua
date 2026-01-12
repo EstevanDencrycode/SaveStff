@@ -1,4 +1,4 @@
---[[
+--[[Test
      _      ___         ____  ______
     | | /| / (_)__  ___/ / / / /  _/
     | |/ |/ / / _ \/ _  / /_/ // /  
@@ -321,7 +321,9 @@ do
     end
     function GetAssetThumbnail(assetId)
         HttpService = game:GetService("HttpService")
-        local apiUrl = "https://thumbnails.roproxy.com/v1/assets?assetIds=" .. tostring(assetId) .. "&size=420x420&format=Png&isCircular=false"
+        local apiUrl = "https://thumbnails.roproxy.com/v1/assets?assetIds="
+            .. tostring(assetId)
+            .. "&size=1024x1024&format=Png&isCircular=false"
 
         local success, response = pcall(function()
             return request({
@@ -340,7 +342,7 @@ do
         end
 
         local imageUrl = data.data[1].imageUrl
-        local fileName = "thumb_" .. tostring(assetId) .. ".png"
+        local fileName = "thumb_" .. assetId .. "_1024.png"
 
         if not isfile(fileName) then
             local imgSuccess, imgResponse = pcall(function()
@@ -350,11 +352,11 @@ do
                 })
             end)
 
-            if imgSuccess and imgResponse and imgResponse.Body then
-                writefile(fileName, imgResponse.Body)
-            else
+            if not imgSuccess or not imgResponse or not imgResponse.Body then
                 return ""
             end
+
+            writefile(fileName, imgResponse.Body)
         end
 
         return getcustomasset(fileName)

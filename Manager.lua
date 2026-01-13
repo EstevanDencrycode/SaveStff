@@ -1,4 +1,4 @@
---V1.1
+--v1.2
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -162,19 +162,89 @@ function SaveManager:BuildConfigSection(Tab)
     })
     
     Section:Button({
+        Title = "Delete Selected Config",
+        Callback = function()
+            local name = ConfigListDropdown.Value
+            if not name then return end
+            
+            local path = self.Folder .. "/settings/" .. name .. ".json"
+            if isfile(path) then
+                delfile(path)
+                ConfigListDropdown:Refresh(self:GetConfigList())
+                if self.Library then
+                    self.Library:Notify({
+                        Title = "Save Manager",
+                        Content = "Deleted config: " .. name,
+                        Icon = "trash"
+                    })
+                end
+            end
+        end
+    })
+
+    Section:Button({
+        Title = "Delete All Configs",
+        Callback = function()
+            self.Library:Popup({
+                Title = "Delete All?",
+                Icon = "alert-triangle",
+                Content = "Are you sure you want to delete ALL configurations? This cannot be undone.",
+                Buttons = {
+                    {
+                        Title = "Cancel",
+                        Callback = function() end,
+                        Variant = "Tertiary",
+                    },
+                    {
+                        Title = "Delete All",
+                        Icon = "trash",
+                        Callback = function()
+                            local list = listfiles(self.Folder .. "/settings")
+                            for _, file in ipairs(list) do
+                                if file:sub(-5) == ".json" then
+                                    delfile(file)
+                                end
+                            end
+                            ConfigListDropdown:Refresh(self:GetConfigList())
+                            self.Library:Notify({Title="Manager", Content="All configs deleted", Icon="trash"})
+                        end,
+                        Variant = "Primary",
+                    }
+                }
+            })
+        end
+    })
+
+    Section:Button({
         Title = "Refresh List",
         Callback = function()
             ConfigListDropdown:Refresh(self:GetConfigList())
         end
     })
-    
+
     local AutoloadFile = self.Folder .. "/settings/autoload.txt"
-    Section:Button({
+    
+    local function GetAutoloadName()
+        if isfile(AutoloadFile) then return readfile(AutoloadFile) end
+        return "None"
+    end
+
+    local AutoloadButton
+    AutoloadButton = Section:Button({
         Title = "Set as Autoload",
+        Desc = "Autoloading: " .. GetAutoloadName(),
         Callback = function()
             local name = ConfigListDropdown.Value
-            if name then
+            if not name then 
+                if self.Library then self.Library:Notify({Title="Error", Content="Select a config first!", Icon="x"}) end
+                return 
+            end
+            
+            local current = GetAutoloadName()
+
+            local function SetAutoload()
                 writefile(AutoloadFile, name)
+                AutoloadButton:SetDesc("Autoloading: " .. name)
                 if self.Library then
                     self.Library:Notify({
                         Title = "Save Manager",
@@ -184,9 +254,46 @@ function SaveManager:BuildConfigSection(Tab)
                     })
                 end
             end
+
+            if current == "None" or current == name then
+                SetAutoload()
+            else
+                self.Library:Popup({
+                    Title = "Change Autoload?",
+                    Icon = "info",
+                    Content = "Switch autoload from '"..current.."' to '"..name.."'?",
+                    Buttons = {
+                        {
+                            Title = "Cancel",
+                            Callback = function() end,
+                            Variant = "Tertiary",
+                        },
+                        {
+                            Title = "Confirm",
+                            Icon = "check",
+                            Callback = function() SetAutoload() end,
+                            Variant = "Primary",
+                        }
+                    }
+                })
+            end
         end
     })
-    
+
+    Section:Button({
+        Title = "Reset Autoload",
+        Desc = "Disable auto-loading",
+        Callback = function()
+            if isfile(AutoloadFile) then
+                delfile(AutoloadFile)
+                AutoloadButton:SetDesc("Autoloading: None")
+                if self.Library then
+                    self.Library:Notify({Title = "Manager", Content = "Autoload disabled", Icon = "trash"})
+                end
+            end
+        end
+    })
+
     if isfile(AutoloadFile) then
         local name = readfile(AutoloadFile)
         self:Load(name)

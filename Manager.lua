@@ -1,4 +1,4 @@
---v1.2
+--v1.3 -- sliders now get saved
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -18,6 +18,10 @@ SaveManager.Parser = {
     },
     Input = {
         Save = function(Obj) return {Type = "Input", Value = Obj.Value} end,
+        Load = function(Obj, Data) Obj:Set(Data.Value) end,
+    },
+    Slider = {
+        Save = function(Obj) return {Type = "Slider", Value = Obj.Value.Default} end,
         Load = function(Obj, Data) Obj:Set(Data.Value) end,
     }
 }

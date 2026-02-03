@@ -1,4 +1,4 @@
---v1.3 -- sliders now get saved
+--v1.4 -- Optimized Load (No Lag)
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -59,7 +59,9 @@ function SaveManager:Save(name)
     local Data = {}
     for Name, Option in pairs(self.Options) do
         if self.Parser[Option.Type] then
-            Data[Name] = self.Parser[Option.Type].Save(Option.Element)
+            pcall(function()
+                Data[Name] = self.Parser[Option.Type].Save(Option.Element)
+            end)
         end
     end
     
@@ -90,7 +92,7 @@ function SaveManager:Load(name)
     
     for Name, Data in pairs(Decoded) do
         if self.Options[Name] and self.Parser[Data.Type] then
-            task.spawn(function()
+            pcall(function()
                 self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
             end)
         end
@@ -164,7 +166,7 @@ function SaveManager:BuildConfigSection(Tab)
             if name then self:Save(name) end
         end
     })
-    
+
     Section:Button({
         Title = "Delete Selected Config",
         Callback = function()

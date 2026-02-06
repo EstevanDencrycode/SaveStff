@@ -1,4 +1,5 @@
---v1.4 -- Optimized Load (No Lag)
+-- 1.5 LAG FIX
+
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -6,6 +7,8 @@ SaveManager.Folder = "WindUISettings"
 SaveManager.Options = {}
 SaveManager.Parser = {}
 SaveManager.Library = nil
+SaveManager.AutoSave = false
+SaveManager.CurrentConfig = nil
 
 SaveManager.Parser = {
     Toggle = {
@@ -47,7 +50,7 @@ function SaveManager:Add(Element, Name, Type)
     self.Options[Name] = {Element = Element, Type = Type}
 end
 
-function SaveManager:Save(name)
+function SaveManager:Save(name, ignoreNotify)
     if not name then return false end
     
     name = name:gsub("[^%w%-%_]", "") 
@@ -69,8 +72,9 @@ function SaveManager:Save(name)
     if not Success then return false end
     
     writefile(fullPath, Encoded)
+    self.CurrentConfig = name
 
-    if self.Library then
+    if self.Library and not ignoreNotify then
         self.Library:Notify({
             Title = "Save Manager",
             Content = "Saved config: " .. name,
@@ -90,13 +94,22 @@ function SaveManager:Load(name)
     local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(fullPath))
     if not Success then return false end
     
+    local count = 0
     for Name, Data in pairs(Decoded) do
         if self.Options[Name] and self.Parser[Data.Type] then
             pcall(function()
                 self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
             end)
+            
+            -- ANTI-CRASH: Espera cada 10 items para no congelar la pantalla
+            count = count + 1
+            if count % 10 == 0 then
+                task.wait()
+            end
         end
     end
+
+    self.CurrentConfig = name
 
     if self.Library then
         self.Library:Notify({
@@ -166,7 +179,7 @@ function SaveManager:BuildConfigSection(Tab)
             if name then self:Save(name) end
         end
     })
-
+    
     Section:Button({
         Title = "Delete Selected Config",
         Callback = function()
@@ -227,7 +240,7 @@ function SaveManager:BuildConfigSection(Tab)
             ConfigListDropdown:Refresh(self:GetConfigList())
         end
     })
-
+    
     local AutoloadFile = self.Folder .. "/settings/autoload.txt"
     
     local function GetAutoloadName()
@@ -285,7 +298,7 @@ function SaveManager:BuildConfigSection(Tab)
             end
         end
     })
-
+    
     Section:Button({
         Title = "Reset Autoload",
         Desc = "Disable auto-loading",
@@ -300,10 +313,27 @@ function SaveManager:BuildConfigSection(Tab)
         end
     })
 
+    Section:Toggle({
+        Title = "Auto Save",
+        Desc = "Automatically save current config every 1s",
+        Value = false,
+        Callback = function(val)
+            self.AutoSave = val
+        end
+    })
+    
     if isfile(AutoloadFile) then
         local name = readfile(AutoloadFile)
         self:Load(name)
     end
+
+    task.spawn(function()
+        while task.wait(1) do
+            if self.AutoSave and self.CurrentConfig then
+                self:Save(self.CurrentConfig, true)
+            end
+        end
+    end)
 end
 
 return SaveManager

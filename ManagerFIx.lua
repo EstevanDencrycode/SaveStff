@@ -1,4 +1,4 @@
--- 1.6
+-- 1.7 slider save fixed
 
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
@@ -24,7 +24,7 @@ SaveManager.Parser = {
         Load = function(Obj, Data) Obj:Set(Data.Value) end,
     },
     Slider = {
-        Save = function(Obj) return {Type = "Slider", Value = Obj.Value} end,
+        Save = function(Obj) return {Type = "Slider", Value = Obj.Value.Default} end,
         Load = function(Obj, Data) Obj:Set(Data.Value) end,
     }
 }

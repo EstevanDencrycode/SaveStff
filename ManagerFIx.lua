@@ -1,4 +1,4 @@
---! GGS
+--! Test
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -8,6 +8,7 @@ SaveManager.Parser = {}
 SaveManager.Library = nil
 SaveManager.AutoSave = true
 SaveManager.CurrentConfig = nil
+SaveManager.IsLoading = false
 
 local function tableMatch(t1, t2)
     if type(t1) ~= "table" or type(t2) ~= "table" then return t1 == t2 end
@@ -28,8 +29,7 @@ SaveManager.Parser = {
     Dropdown = {
         Save = function(Obj) return {Type = "Dropdown", Value = Obj.Value, Multi = Obj.Multi} end,
         Load = function(Obj, Data) 
-            local match = tableMatch(Obj.Value, Data.Value)
-            if not match then
+            if not tableMatch(Obj.Value, Data.Value) then
                 Obj:Select(Data.Value)
             end
         end,
@@ -43,7 +43,11 @@ SaveManager.Parser = {
         end,
     },
     Slider = {
-        Save = function(Obj) return {Type = "Slider", Value = Obj.Value.Default} end,
+        Save = function(Obj) 
+            local val = Obj.Value
+            if type(val) == "table" and val.Default then val = val.Default end
+            return {Type = "Slider", Value = val} 
+        end,
         Load = function(Obj, Data) 
             local current = (type(Obj.Value) == "table") and Obj.Value.Default or Obj.Value
             if current ~= Data.Value then
@@ -75,7 +79,7 @@ function SaveManager:Add(Element, Name, Type)
 end
 
 function SaveManager:Save(name, ignoreNotify)
-    if not name then return false end
+    if self.IsLoading or not name then return false end
     name = name:gsub("[^%w%-%_]", "") 
     if name == "" then return false end
 
@@ -105,6 +109,9 @@ function SaveManager:Load(name)
     local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(fullPath))
     if not Success then return false end
     
+    self.IsLoading = true
+    self.CurrentConfig = name
+
     local loadCount = 0
     for Name, Data in pairs(Decoded) do
         if self.Options[Name] and self.Parser[Data.Type] then
@@ -114,12 +121,14 @@ function SaveManager:Load(name)
                     self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
                 end)
             end)
-            
-            if loadCount % 5 == 0 then task.wait() end
+            if loadCount % 10 == 0 then task.wait() end
         end
     end
 
-    self.CurrentConfig = name
+    task.delay(0.5, function()
+        self.IsLoading = false
+    end)
+
     return true
 end
 
@@ -211,7 +220,6 @@ function SaveManager:BuildConfigSection(Tab)
     
     local AutoLoadToggle = Section:Toggle({
         Title = "Enable Auto Load",
-        Desc = "Auto loading file: None",
         Value = false,
         Callback = function(val)
             local name = ConfigListDropdown.Value
@@ -227,7 +235,6 @@ function SaveManager:BuildConfigSection(Tab)
 
     local AutoSaveToggle = Section:Toggle({
         Title = "Auto Save",
-        Desc = "Auto saving to file: None",
         Value = true,
         Callback = function(val)
             self.AutoSave = val
@@ -237,11 +244,10 @@ function SaveManager:BuildConfigSection(Tab)
     task.spawn(function()
         while task.wait(1) do
             local current = (ConfigListDropdown.Value and ConfigListDropdown.Value ~= "") and ConfigListDropdown.Value or "autosaved"
-            
             AutoLoadToggle:SetDesc("Auto loading file: " .. current)
             AutoSaveToggle:SetDesc("Auto saving to file: " .. current)
             
-            if self.AutoSave then
+            if self.AutoSave and not self.IsLoading then
                 self:Save(current, true)
                 if not isfile(AutoloadFile) or readfile(AutoloadFile) ~= current then
                     writefile(AutoloadFile, current)

@@ -1,4 +1,4 @@
---! udate
+--! GGS
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -8,6 +8,13 @@ SaveManager.Parser = {}
 SaveManager.Library = nil
 SaveManager.AutoSave = true
 SaveManager.CurrentConfig = nil
+
+local function tableMatch(t1, t2)
+    if type(t1) ~= "table" or type(t2) ~= "table" then return t1 == t2 end
+    for i, v in pairs(t1) do if t2[i] ~= v then return false end end
+    for i, v in pairs(t2) do if t1[i] ~= v then return false end end
+    return true
+end
 
 SaveManager.Parser = {
     Toggle = {
@@ -21,7 +28,8 @@ SaveManager.Parser = {
     Dropdown = {
         Save = function(Obj) return {Type = "Dropdown", Value = Obj.Value, Multi = Obj.Multi} end,
         Load = function(Obj, Data) 
-            if Obj.Value ~= Data.Value then
+            local match = tableMatch(Obj.Value, Data.Value)
+            if not match then
                 Obj:Select(Data.Value)
             end
         end,
@@ -37,7 +45,8 @@ SaveManager.Parser = {
     Slider = {
         Save = function(Obj) return {Type = "Slider", Value = Obj.Value.Default} end,
         Load = function(Obj, Data) 
-            if Obj.Value ~= Data.Value then
+            local current = (type(Obj.Value) == "table") and Obj.Value.Default or Obj.Value
+            if current ~= Data.Value then
                 Obj:Set(Data.Value)
             end
         end,
@@ -96,13 +105,17 @@ function SaveManager:Load(name)
     local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(fullPath))
     if not Success then return false end
     
+    local loadCount = 0
     for Name, Data in pairs(Decoded) do
         if self.Options[Name] and self.Parser[Data.Type] then
+            loadCount = loadCount + 1
             task.spawn(function()
                 pcall(function()
                     self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
                 end)
             end)
+            
+            if loadCount % 5 == 0 then task.wait() end
         end
     end
 
@@ -157,7 +170,7 @@ function SaveManager:BuildConfigSection(Tab)
         ConfigListDropdown:Refresh(self:GetConfigList())
     end
     
-    if not ConfigListDropdown.Value then
+    if not ConfigListDropdown.Value or ConfigListDropdown.Value == "" then
         ConfigListDropdown:Select("autosaved")
     end
     
@@ -198,7 +211,7 @@ function SaveManager:BuildConfigSection(Tab)
     
     local AutoLoadToggle = Section:Toggle({
         Title = "Enable Auto Load",
-        Desc = "Currently using: None",
+        Desc = "Auto loading file: None",
         Value = false,
         Callback = function(val)
             local name = ConfigListDropdown.Value
@@ -214,7 +227,7 @@ function SaveManager:BuildConfigSection(Tab)
 
     local AutoSaveToggle = Section:Toggle({
         Title = "Auto Save",
-        Desc = "Currently saving: None",
+        Desc = "Auto saving to file: None",
         Value = true,
         Callback = function(val)
             self.AutoSave = val
@@ -222,17 +235,16 @@ function SaveManager:BuildConfigSection(Tab)
     })
 
     task.spawn(function()
-        while task.wait(0.5) do
-            local current = ConfigListDropdown.Value or "None"
+        while task.wait(1) do
+            local current = (ConfigListDropdown.Value and ConfigListDropdown.Value ~= "") and ConfigListDropdown.Value or "autosaved"
+            
             AutoLoadToggle:SetDesc("Auto loading file: " .. current)
             AutoSaveToggle:SetDesc("Auto saving to file: " .. current)
             
             if self.AutoSave then
-                local target = ConfigListDropdown.Value or "autosaved"
-                self:Save(target, true)
-                
-                if not isfile(AutoloadFile) or readfile(AutoloadFile) ~= target then
-                    writefile(AutoloadFile, target)
+                self:Save(current, true)
+                if not isfile(AutoloadFile) or readfile(AutoloadFile) ~= current then
+                    writefile(AutoloadFile, current)
                 end
             end
         end
@@ -245,7 +257,7 @@ function SaveManager:BuildConfigSection(Tab)
             if currentAuto and selected == currentAuto then
                 if not AutoLoadToggle.Value then AutoLoadToggle:Set(true) end
             else
-                if AutoLoadToggle.Value and (not currentAuto or selected ~= currentAuto) then 
+                if AutoLoadToggle.Value then 
                     AutoLoadToggle:Set(false) 
                 end
             end

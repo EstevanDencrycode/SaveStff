@@ -1,5 +1,3 @@
--- 1.7 slider save fixed
-
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -52,13 +50,10 @@ end
 
 function SaveManager:Save(name, ignoreNotify)
     if not name then return false end
-    
     name = name:gsub("[^%w%-%_]", "") 
-
     if name == "" then return false end
 
     local fullPath = self.Folder .. "/settings/" .. name .. ".json"
-    
     local Data = {}
     for Name, Option in pairs(self.Options) do
         if self.Parser[Option.Type] then
@@ -194,52 +189,11 @@ function SaveManager:BuildConfigSection(Tab)
         Callback = function()
             local name = ConfigListDropdown.Value
             if not name then return end
-            
             local path = self.Folder .. "/settings/" .. name .. ".json"
             if isfile(path) then
                 delfile(path)
                 ConfigListDropdown:Refresh(self:GetConfigList())
-                if self.Library then
-                    self.Library:Notify({
-                        Title = "Save Manager",
-                        Content = "Deleted config: " .. name,
-                        Icon = "trash"
-                    })
-                end
             end
-        end
-    })
-
-    Section:Button({
-        Title = "Delete All Configs",
-        Callback = function()
-            self.Library:Popup({
-                Title = "Delete All?",
-                Icon = "alert-triangle",
-                Content = "Are you sure you want to delete ALL configurations? This cannot be undone.",
-                Buttons = {
-                    {
-                        Title = "Cancel",
-                        Callback = function() end,
-                        Variant = "Tertiary",
-                    },
-                    {
-                        Title = "Delete All",
-                        Icon = "trash",
-                        Callback = function()
-                            local list = listfiles(self.Folder .. "/settings")
-                            for _, file in ipairs(list) do
-                                if file:sub(-5) == ".json" then
-                                    delfile(file)
-                                end
-                            end
-                            ConfigListDropdown:Refresh(self:GetConfigList())
-                            self.Library:Notify({Title="Manager", Content="All configs deleted", Icon="trash"})
-                        end,
-                        Variant = "Primary",
-                    }
-                }
-            })
         end
     })
 
@@ -259,54 +213,57 @@ function SaveManager:BuildConfigSection(Tab)
 
     local AutoLoadToggle = Section:Toggle({
         Title = "Enable Auto Load",
-        Desc = "Automatically loads the selected config on launch",
-        Value = false, -- Se actualiza abajo
+        Value = false,
         Callback = function(val)
             local name = ConfigListDropdown.Value
             if val then
                 if name then
                     writefile(AutoloadFile, name)
-                    if self.Library then self.Library:Notify({Title="Manager", Content="Autoload set to: "..name, Icon="check"}) end
-                else
-                    if self.Library then self.Library:Notify({Title="Error", Content="Select a config first!", Icon="x"}) end
                 end
             else
-                if isfile(AutoloadFile) then
-                    delfile(AutoloadFile)
-                    if self.Library then self.Library:Notify({Title="Manager", Content="Autoload disabled", Icon="trash"}) end
-                end
+                if isfile(AutoloadFile) then delfile(AutoloadFile) end
             end
         end
     })
+
+    Section:Toggle({
+        Title = "Auto Save",
+        Value = false,
+        Callback = function(val)
+            self.AutoSave = val
+            if val then
+                if not self.CurrentConfig then
+                    self.CurrentConfig = "autosaved"
+                end
+                writefile(AutoloadFile, self.CurrentConfig)
+            end
+        end
+    })
+    
+    task.spawn(function()
+        while task.wait(1) do
+            if self.AutoSave then
+                local target = self.CurrentConfig or "autosaved"
+                self:Save(target, true)
+                if isfile(AutoloadFile) then
+                    if readfile(AutoloadFile) ~= target then writefile(AutoloadFile, target) end
+                else
+                    writefile(AutoloadFile, target)
+                end
+            end
+        end
+    end)
 
     task.spawn(function()
         while task.wait(0.5) do
             local currentAuto = GetAutoloadName()
             local selected = ConfigListDropdown.Value
-            
             if currentAuto and selected == currentAuto then
                 if not AutoLoadToggle.Value then AutoLoadToggle:Set(true) end
             else
                 if AutoLoadToggle.Value and (not currentAuto) then 
                     AutoLoadToggle:Set(false) 
                 end
-            end
-        end
-    end)
-
-    Section:Toggle({
-        Title = "Auto Save",
-        Desc = "Automatically save current config every 1s",
-        Value = false,
-        Callback = function(val)
-            self.AutoSave = val
-        end
-    })
-    
-    task.spawn(function()
-        while task.wait(1) do
-            if self.AutoSave and self.CurrentConfig then
-                self:Save(self.CurrentConfig, true)
             end
         end
     end)

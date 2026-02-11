@@ -1,4 +1,5 @@
---! Test
+-- 1.8 AutoLoad Button Fixed
+
 local HttpService = game:GetService("HttpService")
 local SaveManager = {}
 
@@ -6,54 +7,25 @@ SaveManager.Folder = "WindUISettings"
 SaveManager.Options = {}
 SaveManager.Parser = {}
 SaveManager.Library = nil
-SaveManager.AutoSave = true
+SaveManager.AutoSave = false
 SaveManager.CurrentConfig = nil
-SaveManager.IsLoading = false
-
-local function tableMatch(t1, t2)
-    if type(t1) ~= "table" or type(t2) ~= "table" then return t1 == t2 end
-    for i, v in pairs(t1) do if t2[i] ~= v then return false end end
-    for i, v in pairs(t2) do if t1[i] ~= v then return false end end
-    return true
-end
 
 SaveManager.Parser = {
     Toggle = {
         Save = function(Obj) return {Type = "Toggle", Value = Obj.Value} end,
-        Load = function(Obj, Data) 
-            if Obj.Value ~= Data.Value then
-                Obj:Set(Data.Value)
-            end
-        end,
+        Load = function(Obj, Data) Obj:Set(Data.Value) end,
     },
     Dropdown = {
         Save = function(Obj) return {Type = "Dropdown", Value = Obj.Value, Multi = Obj.Multi} end,
-        Load = function(Obj, Data) 
-            if not tableMatch(Obj.Value, Data.Value) then
-                Obj:Select(Data.Value)
-            end
-        end,
+        Load = function(Obj, Data) Obj:Select(Data.Value) end,
     },
     Input = {
         Save = function(Obj) return {Type = "Input", Value = Obj.Value} end,
-        Load = function(Obj, Data) 
-            if Obj.Value ~= Data.Value then
-                Obj:Set(Data.Value)
-            end
-        end,
+        Load = function(Obj, Data) Obj:Set(Data.Value) end,
     },
     Slider = {
-        Save = function(Obj) 
-            local val = Obj.Value
-            if type(val) == "table" and val.Default then val = val.Default end
-            return {Type = "Slider", Value = val} 
-        end,
-        Load = function(Obj, Data) 
-            local current = (type(Obj.Value) == "table") and Obj.Value.Default or Obj.Value
-            if current ~= Data.Value then
-                Obj:Set(Data.Value)
-            end
-        end,
+        Save = function(Obj) return {Type = "Slider", Value = Obj.Value.Default} end,
+        Load = function(Obj, Data) Obj:Set(Data.Value) end,
     }
 }
 
@@ -79,11 +51,14 @@ function SaveManager:Add(Element, Name, Type)
 end
 
 function SaveManager:Save(name, ignoreNotify)
-    if self.IsLoading or not name then return false end
+    if not name then return false end
+    
     name = name:gsub("[^%w%-%_]", "") 
+
     if name == "" then return false end
 
     local fullPath = self.Folder .. "/settings/" .. name .. ".json"
+    
     local Data = {}
     for Name, Option in pairs(self.Options) do
         if self.Parser[Option.Type] then
@@ -98,6 +73,16 @@ function SaveManager:Save(name, ignoreNotify)
     
     writefile(fullPath, Encoded)
     self.CurrentConfig = name
+
+    if self.Library and not ignoreNotify then
+        self.Library:Notify({
+            Title = "Save Manager",
+            Content = "Saved config: " .. name,
+            Duration = 3,
+            Icon = "check"
+        })
+    end
+
     return true
 end
 
@@ -109,25 +94,30 @@ function SaveManager:Load(name)
     local Success, Decoded = pcall(HttpService.JSONDecode, HttpService, readfile(fullPath))
     if not Success then return false end
     
-    self.IsLoading = true
-    self.CurrentConfig = name
-
-    local loadCount = 0
+    local count = 0
     for Name, Data in pairs(Decoded) do
         if self.Options[Name] and self.Parser[Data.Type] then
-            loadCount = loadCount + 1
-            task.spawn(function()
-                pcall(function()
-                    self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
-                end)
+            pcall(function()
+                self.Parser[Data.Type].Load(self.Options[Name].Element, Data)
             end)
-            if loadCount % 10 == 0 then task.wait() end
+            
+            count = count + 1
+            if count % 10 == 0 then
+                task.wait()
+            end
         end
     end
 
-    task.delay(0.5, function()
-        self.IsLoading = false
-    end)
+    self.CurrentConfig = name
+
+    if self.Library then
+        self.Library:Notify({
+            Title = "Save Manager",
+            Content = "Loaded config: " .. name,
+            Duration = 3,
+            Icon = "check"
+        })
+    end
 
     return true
 end
@@ -166,22 +156,12 @@ function SaveManager:BuildConfigSection(Tab)
         Callback = function() end
     })
     
-    local configs = self:GetConfigList()
     local ConfigListDropdown = Section:Dropdown({
         Title = "Config List",
-        Values = configs,
+        Values = self:GetConfigList(),
         AllowNull = true,
         Callback = function() end
     })
-
-    if #configs == 0 or (not table.find(configs, "autosaved")) then
-        self:Save("autosaved", true)
-        ConfigListDropdown:Refresh(self:GetConfigList())
-    end
-    
-    if not ConfigListDropdown.Value or ConfigListDropdown.Value == "" then
-        ConfigListDropdown:Select("autosaved")
-    end
     
     Section:Button({
         Title = "Create Config",
@@ -210,62 +190,109 @@ function SaveManager:BuildConfigSection(Tab)
     })
     
     Section:Button({
+        Title = "Delete Selected Config",
+        Callback = function()
+            local name = ConfigListDropdown.Value
+            if not name then return end
+            
+            local path = self.Folder .. "/settings/" .. name .. ".json"
+            if isfile(path) then
+                delfile(path)
+                ConfigListDropdown:Refresh(self:GetConfigList())
+                if self.Library then
+                    self.Library:Notify({
+                        Title = "Save Manager",
+                        Content = "Deleted config: " .. name,
+                        Icon = "trash"
+                    })
+                end
+            end
+        end
+    })
+
+    Section:Button({
+        Title = "Delete All Configs",
+        Callback = function()
+            self.Library:Popup({
+                Title = "Delete All?",
+                Icon = "alert-triangle",
+                Content = "Are you sure you want to delete ALL configurations? This cannot be undone.",
+                Buttons = {
+                    {
+                        Title = "Cancel",
+                        Callback = function() end,
+                        Variant = "Tertiary",
+                    },
+                    {
+                        Title = "Delete All",
+                        Icon = "trash",
+                        Callback = function()
+                            local list = listfiles(self.Folder .. "/settings")
+                            for _, file in ipairs(list) do
+                                if file:sub(-5) == ".json" then
+                                    delfile(file)
+                                end
+                            end
+                            ConfigListDropdown:Refresh(self:GetConfigList())
+                            self.Library:Notify({Title="Manager", Content="All configs deleted", Icon="trash"})
+                        end,
+                        Variant = "Primary",
+                    }
+                }
+            })
+        end
+    })
+
+    Section:Button({
         Title = "Refresh List",
         Callback = function()
             ConfigListDropdown:Refresh(self:GetConfigList())
         end
     })
 
-    local AutoloadFile = self.Folder .. "/settings/autoload.txt"
-    
-    local AutoLoadToggle = Section:Toggle({
-        Title = "Enable Auto Load",
-        Value = false,
-        Callback = function(val)
+    -- [MODIFICACIÓN] Botón en lugar de Toggle para el AutoLoad
+    Section:Button({
+        Title = "Set AutoLoad Config",
+        Callback = function()
             local name = ConfigListDropdown.Value
-            if val then
-                if name then
-                    writefile(AutoloadFile, name)
+            if name then
+                local AutoloadFile = self.Folder .. "/settings/autoload.txt"
+                writefile(AutoloadFile, name)
+                
+                if self.Library then
+                    self.Library:Notify({
+                        Title = "Save Manager",
+                        Content = "AutoLoad set to: " .. name,
+                        Duration = 5,
+                        Icon = "check"
+                    })
                 end
             else
-                if isfile(AutoloadFile) then delfile(AutoloadFile) end
+                if self.Library then
+                    self.Library:Notify({
+                        Title = "Save Manager",
+                        Content = "Please select a config first",
+                        Duration = 3,
+                        Icon = "alert-triangle"
+                    })
+                end
             end
         end
     })
 
-    local AutoSaveToggle = Section:Toggle({
+    Section:Toggle({
         Title = "Auto Save",
-        Value = true,
+        Desc = "Automatically save current config every 1s",
+        Value = false,
         Callback = function(val)
             self.AutoSave = val
         end
     })
-
+    
     task.spawn(function()
         while task.wait(1) do
-            local current = (ConfigListDropdown.Value and ConfigListDropdown.Value ~= "") and ConfigListDropdown.Value or "autosaved"
-            AutoLoadToggle:SetDesc("Auto loading file: " .. current)
-            AutoSaveToggle:SetDesc("Auto saving to file: " .. current)
-            
-            if self.AutoSave and not self.IsLoading then
-                self:Save(current, true)
-                if not isfile(AutoloadFile) or readfile(AutoloadFile) ~= current then
-                    writefile(AutoloadFile, current)
-                end
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.5) do
-            local currentAuto = isfile(AutoloadFile) and readfile(AutoloadFile) or nil
-            local selected = ConfigListDropdown.Value
-            if currentAuto and selected == currentAuto then
-                if not AutoLoadToggle.Value then AutoLoadToggle:Set(true) end
-            else
-                if AutoLoadToggle.Value then 
-                    AutoLoadToggle:Set(false) 
-                end
+            if self.AutoSave and self.CurrentConfig then
+                self:Save(self.CurrentConfig, true)
             end
         end
     end)
